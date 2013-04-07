@@ -1,0 +1,116 @@
+<?php
+session_start();
+header("Content-type:text/html;charset:utf-8");
+
+//全局变量
+$succ_result=0;
+$error_result=0;
+$file=$_FILES['filename'];
+$max_size="2000000"; //最大文件限制（单位：byte）
+$fname=$file['name'];
+//print_r ($file);
+
+
+$ftype=strtolower(substr(strrchr($fname,'.'),1));
+ 
+ //文件格式
+ $uploadfile=$file['tmp_name'];
+ if($_SERVER['REQUEST_METHOD']=='POST'){
+     if(is_uploaded_file($uploadfile)){
+          if($file['size']>$max_size){
+         echo "导入文件太大"; 
+         exit;
+         }
+          if($ftype!='xls'){
+         echo "导入的文件不是xls文件";
+          exit;   
+         }
+     }else{
+     echo "导入文件为空!";
+      exit; 
+     } 
+ }
+
+//调用phpexcel类库
+require_once 'common/excel/PHPExcel.php';  
+require_once 'common/excel/phpExcel/Writer/Excel2007.php';  
+require_once 'common/excel/phpExcel/Writer/Excel5.php';  
+include_once 'common/excel/phpExcel/IOFactory.php';
+
+//连接数据库   
+$con = mysql_connect("localhost","root","qweasd") or die("Error 2#". mysql_error());   
+mysql_select_db("trafficflowcounter",$con) or die("Error 2#". mysql_error());   
+switch ($fname){
+ 	case "user.xls":
+ 		mysql_query ("truncate table user");
+ 		break;
+ 	case "location.xls":
+ 		mysql_query ("truncate table location");
+ 		break;
+ 	case "direction.xls":
+ 	  mysql_query ("truncate table direction");
+ 	  break;
+ 	case "type.xls":
+ 		mysql_query ("truncate table type");
+ 	  break;
+ 	default:
+ 		die ("文件名与数据表名不符!");
+ }
+
+
+$objReader = PHPExcel_IOFactory::createReader('Excel5');//use excel2007 for 2007 format 
+$objPHPExcel = $objReader->load($uploadfile); 
+$sheet = $objPHPExcel->getSheet(0); 
+$highestRow = $sheet->getHighestRow(); // 取得总行数 
+$highestColumn = $sheet->getHighestColumn(); // 取得总列数
+  $arr_result=array();
+  $strs=array();
+
+for($j=2;$j<=$highestRow;$j++)
+ { 
+    unset($arr_result);
+    unset($strs);
+ for($k='A';$k<= $highestColumn;$k++){ 
+     //读取单元格
+  	$arr_result  .= $objPHPExcel->getActiveSheet()->getCell("$k$j")->getValue().',';
+ }
+ 
+ $strs=explode(",",$arr_result);
+ switch ($fname){
+ 	case "user.xls":
+ 		if (trim($strs[2])=="")
+ 			$sql="insert into user (ID,UserName,Password) values ('$strs[0]','$strs[1]','$strs[0]')";
+ 		else
+ 			$sql="insert into user (ID,UserName,Password) values ('$strs[0]','$strs[1]','$strs[2]')";	
+ 		break;
+ 	case "location.xls":
+ 		$sql="insert into location (ID,LocationName) values ('$strs[0]','$strs[1]')";
+ 		break;
+ 	case "direction.xls":
+ 	  $sql="insert into direction (ID,DirectionName) values ('$strs[0]','$strs[1]')";
+ 	  break;
+ 	case "type.xls":
+ 		if (trim($strs[2]) =="")
+ 			$sql="insert into type (ID,TypeName,Parent) values ('$strs[0]','$strs[1]',NULL)";
+ 		else
+ 			$sql="insert into type (ID,TypeName,Parent) values ('$strs[0]','$strs[1]','$strs[2]')";
+ 	  break;
+ 	default:
+ 		die ("文件名与数据表名不符!");
+ }
+ echo $sql."<br/>"; 
+
+ mysql_query("set names utf8");
+ $result=mysql_query($sql) or die("执行错误");
+
+ $insert_num=mysql_affected_rows();
+  if($insert_num>0){
+        $succ_result+=1;
+    }else{
+        $error_result+=1;
+   }
+}
+
+echo "插入成功".$succ_result."条数据！！！<br>";
+echo "插入失败".$error_result."条数据！！！";
+?>
